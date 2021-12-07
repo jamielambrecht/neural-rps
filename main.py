@@ -217,9 +217,9 @@ def build_model(rock, paper, scissors, nothing, window, tk):
 
     nnm_output = nasnet_mobile.output # Custom head based on output feature maps from NASNETMobile.
     nnm_output = GlobalAveragePooling2D()(nnm_output) # use global average pooling to minimize overfitting
-    nnm_output = Dense(712, activation='relu')(nnm_output) # a dense neural network layer with 712-d output vector
+    nnm_output = Dense(512, activation='relu')(nnm_output) # a dense neural network layer with 712-d output vector, Recitified Linear Unit activation
     nnm_output = Dropout(0.40)(nnm_output) # Drop 40% of activations to reduce overfitting
-    nnm_output = Dense(4, activation='softmax')(nnm_output) # a probability distribution with 4 output classes.
+    nnm_output = Dense(4, activation='softmax')(nnm_output) # a probability distribution with 4 output classes, softmax activation
 
     model = Model(inputs=nasnet_mobile.input, outputs=nnm_output)
 
@@ -324,16 +324,16 @@ def check_model(model, label_names, window, tk):
     ### Camera Feed Image
     window_frame = Frame(window, relief=RAISED, borderwidth=1)
     window_frame.pack(fill=BOTH, expand=True)
-    image_tklabel = Label(window)
+    image_tklabel = Label(window_frame)
     image_tklabel.pack()
     window.pack(fill=BOTH, expand=True)
     ### Buttons / Etc.
     ui_text_frame = Frame(window_frame, borderwidth=1)
-    ui_text_frame.pack(side=LEFT, padx=5, pady=5)
     ui_text = Label(ui_text_frame, text="Check gestures to ensure model accuracy...")
     ui_text.grid(column = 0, row = 0)
     ui_text_2 = Label(ui_text_frame, text="")
     ui_text_2.grid(column = 0, row = 1)
+    ui_text_frame.pack(side=LEFT, padx=5, pady=5)
     quit_button = Button(window_frame, text="Quit", command=lambda m=True: exit_screen(quit=m))
     quit_button.pack(side=RIGHT, padx=5, pady=5)
     continueButton = Button(window_frame, text="Continue", command=lambda m=False : exit_screen(quit=m))
