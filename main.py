@@ -2,20 +2,17 @@
 # STANDARD LIBRARIES
 from collections import deque
 from enum import IntEnum
-from random import choice, shuffle
-from re import M
+from random import choice
 import sys
 from tkinter.constants import TOP
-from typing import Text
-#Pillow
-from PIL import Image, ImageTk
 #Tkinter
-from tkinter import Text, Tk, LEFT, RIGHT, BOTH, RAISED, INSERT, CENTER, TOP
+from tkinter import Tk, LEFT, RIGHT, BOTH, RAISED, TOP
 from tkinter.ttk import Frame, Button, Style, Label
 
 # THIRD-PARTY LIBRARIES
 import cv2 # Open-CV
 import numpy as np # NumPy
+from PIL import Image, ImageTk # Pillow
 from scipy import stats # SciPy
 # SK Learn
 from sklearn.model_selection import train_test_split
@@ -172,7 +169,7 @@ def build_model(rock, paper, scissors, nothing, window, tk):
     output_text_stack = deque([" "] * text_stack_length, maxlen=text_stack_length)
     ui_text_stack = []
     for i in range(text_stack_length):
-        ui_text_stack.append(Label(ui_text_stack_container, text=str(i)))
+        ui_text_stack.append(Label(ui_text_stack_container, text=""))
         ui_text_stack[i].grid(row=int(i), column=0, padx=5, pady=5)
     ui_text_stack_container.pack(side=TOP, pady=32)
     header_text = Label(window_frame, text="Training neural network model...")
@@ -382,16 +379,6 @@ def check_model(model, label_names, window, tk):
     return quit_flag
 
 
-def determine_winner(player_move: ImageClass, computer_move: ImageClass):
-    if player_move.value == computer_move.value:
-        return None
-    elif (player_move.value + 1) % 3 == computer_move.value:
-        return Players.computer
-    else:
-        return Players.player
-
-
-
 def play_game(window, tk):
     def update():
         tk.update_idletasks()
@@ -400,6 +387,20 @@ def play_game(window, tk):
     def exit_screen(quit):
         nonlocal continue_flag; continue_flag = True
         nonlocal quit_flag; quit_flag = quit
+
+    def move_that_beats(move):
+        if move == ImageClass.rock:
+            return ImageClass.paper
+        if move == ImageClass.paper:
+            return ImageClass.scissors
+        if move == ImageClass.scissors:
+            return ImageClass.rock
+
+    def determine_match_winner(player_move: ImageClass, computer_move: ImageClass):
+        if player_move == move_that_beats(computer_move):
+            return Players.player
+        elif computer_move == move_that_beats(player_move):
+            return Players.computer
 
     ## UI ATTRIBUTES
     window_name = "Play Rock, Paper, Scissors!"
@@ -438,7 +439,7 @@ def play_game(window, tk):
     region_of_interest = 234
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
 
-    attempts = 5 # the number of matches in a game. E.g. "best of 5", etc.
+    matches = 16 # the number of matches in a game. E.g. "best of 5", etc.
     player_move, computer_move = ImageClass.nothing, ImageClass.nothing
 
     image_labels = [ImageClass.nothing, ImageClass.paper,
@@ -450,10 +451,14 @@ def play_game(window, tk):
 
     image_box_color = (255, 0, 0) # Color of the bounding box
     hand_detected = False # Use this variable to determine whether we have seen a hand or not
-    matches_left = attempts # Used to count down the number of matches in the game set
+    matches_left = matches # Used to count down the number of matches in the game set
     confidence_threshold = 0.70 # Minimum confidence value to assume the image recognition is correct 
     prediction_queue = 5 # use the mode of x predictions to reduce false positives
     moves_buffer = deque([ImageClass.nothing] * prediction_queue, maxlen=prediction_queue)
+    
+    # Transition matrix used for predicting the player's next move
+    transition_matrix = [[1/3] * 3] * 3
+    previous_player_move = None
 
     while not continue_flag:
 
@@ -483,11 +488,39 @@ def play_game(window, tk):
             # use the predicition as the player's move if they have removed their hand from view since the last move 
             if player_move != ImageClass.nothing and hand_detected == False:
                 hand_detected = True # Used to lock this subroutine until the user has lowered their hand 
-                computer_move = choice([ImageClass.rock,
-                                    ImageClass.paper,
-                                    ImageClass.scissors]
-                                    ) # Computer chooses a move at random
-                winner = determine_winner(player_move, computer_move) # Determine the winner.
+
+                print("transition_matrix: RPSxRPS")
+                for column in transition_matrix:
+                    print(column)
+
+                if previous_player_move == None:
+                    computer_move = choice([ImageClass.rock,
+                                        ImageClass.paper,
+                                        ImageClass.scissors]
+                                        ) # Computer chooses a move at random
+                else:
+                    max_probability = 0
+                    for i, probability in enumerate(transition_matrix[previous_player_move]):
+                        if probability > max_probability:
+                            predicted_player_move = ImageClass(i)
+                            max_probability = probability
+                    print("Predicted player move: {}".format(predicted_player_move.name))
+                    computer_move = move_that_beats(predicted_player_move)
+
+                previous_player_move = player_move
+
+                winner = determine_match_winner(player_move, computer_move) # Determine the winner.
+
+                if winner == Players.player:
+                    transition_matrix[player_move][player_move] *= 2
+                elif winner == Players.computer:
+                    for move in [ImageClass.rock, ImageClass.paper, ImageClass.scissors]:
+                        if move not in [player_move, computer_move]:
+                            temp_move = move
+                    transition_matrix[player_move][temp_move] *= 2
+
+                transition_matrix[player_move] = [float(i)/sum(transition_matrix[player_move]) for i in transition_matrix[player_move]]
+
                 matches_left -= 1 # decrement game match counter
 
                 image_box_color = {Players.computer: (0, 0, 255), # Red when the computer wins
@@ -611,7 +644,7 @@ if __name__ == '__main__':
     if load_new_model:
         print(load_model_message)
 
-        collect_training_images_for_model(100, window, tk)
+        if collect_training_images_for_model(100, window, tk): quit(tk)
         model = build_model(image_caches[ImageClass.rock],
                         image_caches[ImageClass.paper],
                         image_caches[ImageClass.scissors],
